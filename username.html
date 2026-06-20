@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pick a username — WhereLoc</title>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="base.css" />
+  <link rel="stylesheet" href="components.css" />
+</head>
+<body>
+  <main class="container" style="max-width:420px;padding:64px 16px;">
+    <h1 style="font-size:var(--fs-xl);margin-bottom:8px;">Pick a display name</h1>
+    <p class="field-hint" style="margin-bottom:24px;">This is what other students see — not your email. Leave it blank and we'll generate one for you.</p>
+
+    <div class="field">
+      <label for="username">Username</label>
+      <input type="text" id="username" maxlength="24" placeholder="e.g. nightowl_42" />
+      <span id="status" class="field-hint"></span>
+    </div>
+
+    <button class="btn btn-primary btn-block" id="continue-btn">Continue</button>
+  </main>
+
+  <script type="module">
+    import { requireAuthOrRedirect, isUsernameTaken, completeUsernameSetup, getCurrentProfile } from "./js/auth.js";
+
+    const user = await requireAuthOrRedirect();
+    if (user) {
+      const existing = await getCurrentProfile();
+      if (existing) location.href = "welcome.html";
+    }
+
+    const input = document.getElementById("username");
+    const status = document.getElementById("status");
+    const continueBtn = document.getElementById("continue-btn");
+
+    let debounceTimer;
+    let isTaken = false;
+
+    input.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      const value = input.value.trim();
+      if (!value) { status.textContent = "We'll generate a random handle like Wanderer#48213."; status.style.color = ""; isTaken = false; return; }
+      status.textContent = "Checking...";
+      debounceTimer = setTimeout(async () => {
+        try {
+          isTaken = await isUsernameTaken(value);
+          status.textContent = isTaken ? "That username is taken." : "Available!";
+          status.style.color = isTaken ? "var(--color-danger)" : "var(--color-ink-muted)";
+        } catch {
+          status.textContent = "";
+        }
+      }, 350);
+    });
+
+    continueBtn.addEventListener("click", async () => {
+      if (isTaken) return;
+      continueBtn.disabled = true;
+      continueBtn.textContent = "Saving...";
+      try {
+        await completeUsernameSetup(input.value.trim());
+        location.href = "welcome.html";
+      } catch (err) {
+        status.textContent = err.message || "Couldn't save username.";
+        status.style.color = "var(--color-danger)";
+        continueBtn.disabled = false;
+        continueBtn.textContent = "Continue";
+      }
+    });
+  </script>
+</body>
+</html>

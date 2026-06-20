@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spot — WhereLoc</title>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="base.css" />
+  <link rel="stylesheet" href="components.css" />
+  <style>
+    .gallery { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; border-radius: var(--radius-md); }
+    .gallery img { width: 100%; flex-shrink: 0; scroll-snap-align: start; aspect-ratio: 4/3; object-fit: cover; border-radius: var(--radius-md); }
+    .detail-actions { display: flex; gap: var(--space-3); margin: var(--space-4) 0; }
+    .review { padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); }
+  </style>
+</head>
+<body>
+  <div id="navbar"></div>
+
+  <main class="container" style="max-width:640px;padding:20px 16px 96px;">
+    <div id="spot-content"><p class="field-hint">Loading...</p></div>
+  </main>
+
+  <div id="review-modal-root"></div>
+
+  <script type="module">
+    import { renderNavbar } from "./components/Navbar.js";
+    import { pinMark, iconStarFilled, iconBookmark, iconNavigate, iconFlag, iconClose } from "./components/icons.js";
+    import { getSpotById, isSpotSaved, saveSpot, unsaveSpot, reportSpot, getReviewsForSpot, addReview } from "./js/api.js";
+    import { getCurrentUser } from "./js/auth.js";
+    import { CATEGORIES } from "./config.js";
+    import { showToast } from "./components/Toast.js";
+
+    renderNavbar(document.getElementById("navbar"));
+
+    const params = new URLSearchParams(location.search);
+    const spotId = params.get("id");
+    const content = document.getElementById("spot-content");
+    const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.value, c.label]));
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str || "";
+      return div.innerHTML;
+    }
+
+    async function init() {
+      if (!spotId) { content.innerHTML = `<p>Spot not found.</p>`; return; }
+
+      let spot;
+      try {
+        spot = await getSpotById(spotId);
+      } catch {
+        content.innerHTML = `<p>This spot doesn't exist or was removed.</p>`;
+        return;
+      }
+
+      const [saved, reviews, user] = await Promise.all([
+        isSpotSaved(spotId),
+        getReviewsForSpot(spotId),
+        getCurrentUser(),
+      ]);
+
+      const avgRating = reviews.length
+        ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+        : null;
+
+      content.innerHTML = `
+        <div class="gallery">
+          ${(spot.image_urls || []).map((url) => `<img src="${url}" alt="${escapeHtml(spot.title)}" />`).join("") || `<div class="empty-state">${pinMark()}</div>`}
+        </div>
+
+        <div style="margin-top:16px;display:flex;align-items:center;gap:8px;">
+          <span class="cat-dot cat-dot--${spot.category}"></span>
+          <span class="eyebrow">${CATEGORY_LABEL[spot.category] || spot.category}</span>
+          ${spot.age_tag !== "all" ? `<span class="badge badge--age" style="position:static;background:var(--color-ink);">${spot.age_tag}</span>` : ""}
+          ${spot.is_staff_pick ? `<span class="badge badge--staff-pick" style="position:static;">Staff Pick</span>` : ""}
+        </div>
+
+        <h1 style="font-size:var(--fs-xl);margin-top:8px;">${escapeHtml(spot.title)}</h1>
+        ${avgRating ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;"><span class="stars">${iconStarFilled}</span> <strong>${avgRating}</strong> <span class="field-hint">(${reviews.length} review${reviews.length === 1 ? "" : "s"})</span></div>` : `<p class="field-hint" style="margin-top:6px;">No reviews yet</p>`}
+
+        <p style="margin-top:16px;line-height:1.6;">${escapeHtml(spot.description)}</p>
+
+        <div class="detail-actions">
+          <button class="btn btn-outline" id="save-btn" aria-pressed="${saved}">${iconBookmark(saved)} ${saved ? "Saved" : "Save"}</button>
+          <button class="btn btn-primary" id="nav-btn">${iconNavigate} Navigate</button>
+          <button class="btn btn-ghost" id="report-btn">${iconFlag} Report</button>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--color-border);margin:24px 0;" />
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <h2 style="font-size:var(--fs-md);">Reviews</h2>
+          <button class="btn btn-outline" id="add-review-btn">Rate & Review</button>
+        </div>
+        <div id="reviews-list">
+          ${reviews.length === 0
+            ? `<p class="field-hint">Be the first to leave a review.</p>`
+            : reviews.map((r) => `
+                <div class="review">
+                  <span class="stars">${Array.from({ length: r.rating }).map(() => iconStarFilled).join("")}</span>
+                  <p style="margin-top:4px;">${escapeHtml(r.comment)}</p>
+                </div>
+              `).join("")
+          }
+        </div>
+      `;
+
+      // --- Save ---
+      const saveBtn = document.getElementById("save-btn");
+      saveBtn.addEventListener("click", async () => {
+        try {
+          const isSaved = saveBtn.getAttribute("aria-pressed") === "true";
+          if (isSaved) { await unsaveSpot(spotId); saveBtn.setAttribute("aria-pressed", "false"); saveBtn.innerHTML = `${iconBookmark(false)} Save`; }
+          else { await saveSpot(spotId); saveBtn.setAttribute("aria-pressed", "true"); saveBtn.innerHTML = `${iconBookmark(true)} Saved`; showToast("Saved"); }
+        } catch (err) {
+          showToast(user ? (err.message || "Something went wrong") : "Log in to save spots");
+        }
+      });
+
+      // --- Navigate ---
+      document.getElementById("nav-btn").addEventListener("click", () => {
+        window.open(`https://maps.google.com/?q=${spot.lat},${spot.lng}`, "_blank");
+      });
+
+      // --- Report ---
+      document.getElementById("report-btn").addEventListener("click", async () => {
+        const reason = prompt("What's wrong with this spot?");
+        if (!reason) return;
+        try { await reportSpot(spotId, reason); showToast("Report sent — thank you"); }
+        catch (err) { showToast(err.message || "Couldn't send report"); }
+      });
+
+      // --- Review modal ---
+      document.getElementById("add-review-btn").addEventListener("click", () => {
+        if (!user) { location.href = `login.html?next=${encodeURIComponent(location.pathname + location.search)}`; return; }
+        openReviewModal();
+      });
+    }
+
+    function openReviewModal() {
+      const root = document.getElementById("review-modal-root");
+      let rating = 0;
+      root.innerHTML = `
+        <div class="modal-backdrop" id="modal-backdrop">
+          <div class="modal">
+            <div class="modal__header">
+              <h2 style="font-size:var(--fs-md);">Rate & review</h2>
+              <button class="icon-btn" id="close-modal" aria-label="Close">${iconClose}</button>
+            </div>
+            <div class="field">
+              <label>Your rating</label>
+              <div id="star-picker" style="display:flex;gap:6px;font-size:24px;color:var(--color-border);">
+                ${[1,2,3,4,5].map((n) => `<button type="button" data-star="${n}" style="color:inherit;">${iconStarFilled}</button>`).join("")}
+              </div>
+            </div>
+            <div class="field">
+              <label for="review-comment">Comment</label>
+              <textarea id="review-comment" rows="4" maxlength="500" placeholder="Reviews aren't linked to your username."></textarea>
+            </div>
+            <button class="btn btn-primary btn-block" id="submit-review">Submit review</button>
+          </div>
+        </div>
+      `;
+
+      const stars = root.querySelectorAll("[data-star]");
+      stars.forEach((star) => {
+        star.addEventListener("click", () => {
+          rating = Number(star.dataset.star);
+          stars.forEach((s) => s.style.color = Number(s.dataset.star) <= rating ? "var(--color-primary)" : "var(--color-border)");
+        });
+      });
+
+      function close() { root.innerHTML = ""; }
+      root.querySelector("#close-modal").addEventListener("click", close);
+      root.querySelector("#modal-backdrop").addEventListener("click", (e) => { if (e.target.id === "modal-backdrop") close(); });
+
+      root.querySelector("#submit-review").addEventListener("click", async () => {
+        if (rating === 0) { showToast("Pick a star rating"); return; }
+        try {
+          await addReview(spotId, rating, document.getElementById("review-comment").value.trim());
+          close();
+          showToast("Review posted");
+          init(); // refresh reviews + average
+        } catch (err) {
+          showToast(err.message || "Couldn't post review");
+        }
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
