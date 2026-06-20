@@ -12,8 +12,8 @@
 // this key.
 // ==========================================================================
 
-export const SUPABASE_URL = "https://YOUR-PROJECT-REF.supabase.co";
-export const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
+export const SUPABASE_URL = "https://taypbinxekgqdprxuxrf.supabase.co/rest/v1/";
+export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRheXBiaW54ZWtncWRwcnh1eHJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NjAyNTAsImV4cCI6MjA5NzQzNjI1MH0.X-BayvMAJoDdeHAooPaphYgx0lpDfAy5qBGgxBfeiZI";
 
 // Name of the Supabase Storage bucket used for spot photos + avatars
 export const STORAGE_BUCKET = "whereloc-media";
