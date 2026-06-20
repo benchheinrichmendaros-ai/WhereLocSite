@@ -60,7 +60,7 @@
         if (!profile) {
           location.href = "username.html";
         } else {
-          location.href = next || "/home.html";
+          location.href = next || "home.html";
         }
       } catch (err) {
         errorBox.textContent = err.message || "Couldn't log in.";
