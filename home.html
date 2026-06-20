@@ -61,7 +61,7 @@
 
     document.getElementById("fab").addEventListener("click", async () => {
       const user = await getCurrentUser();
-      location.href = user ? "/upload.html" : "/login.html?next=/upload.html";
+      location.href = user ? "upload.html" : "login.html?next=upload.html";
     });
   </script>
 </body>
