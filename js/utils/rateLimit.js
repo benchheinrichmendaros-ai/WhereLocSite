@@ -17,14 +17,20 @@ export async function checkRateLimit(action) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Must be logged in.");
 
-  const res = await fetch(RATE_LIMIT_FN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({ action }),
-  });
+  let res;
+  try {
+    res = await fetch(RATE_LIMIT_FN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ action }),
+    });
+  } catch (networkErr) {
+    console.error("Rate limit function unreachable:", networkErr);
+    return { allowed: true };
+  }
 
   if (!res.ok && res.status !== 429) {
     // Fail open on infra errors so a function outage doesn't brick the
